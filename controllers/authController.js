@@ -1,3 +1,4 @@
+const crypto = require("node:crypto");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const { User } = require("../models/user");
@@ -5,6 +6,7 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const gravatar = require("gravatar");
 const jimp = require("jimp");
+const sendEmail = require("../helpers/sendEmail");
 
 //register function
 async function register(req, res, next) {
@@ -17,10 +19,20 @@ async function register(req, res, next) {
 
     const passwordHash = await bcrypt.hash(password, 10);
     const avatarURL = gravatar.url(email);
+    const verifyToken = crypto.randomUUID();
+
+    await sendEmail({
+      to: email,
+      subject: "Welcome to phonebook!",
+      html: `To confirm the registration open the link <a href="http://localhost:3000/users/verify/${verifyToken}">verify your email</a> `,
+      text: `To confirm the registration open the link  http://localhost:3000/users/verify/${verifyToken}`,
+    });
+
     const newUser = await User.create({
       email,
       password: passwordHash,
       avatarURL,
+      verifyToken,
     });
     res.status(201).send({
       user: {
@@ -29,6 +41,26 @@ async function register(req, res, next) {
         avatarURL: newUser.avatarURL,
       },
     });
+  } catch (error) {
+    next(error);
+  }
+}
+
+//verify function
+async function verify(req, res, next) {
+  const { token } = req.params;
+  try {
+    const user = await User.findOne({ verifyToken: token }).exec();
+
+    if (user === null) {
+      return res.status(404).send({ message: "User not found" });
+    }
+
+    await User.findByIdAndUpdate(user._id, {
+      verifyToken: null,
+      verify: true,
+    });
+    res.status(200).send({ message: "Verification successful" });
   } catch (error) {
     next(error);
   }
@@ -54,6 +86,11 @@ async function login(req, res, next) {
         .status(401)
         .send({ message: "email or password is incorrect" });
     }
+
+    if (user.verify === false) {
+      return res.status(401).send({ message: "Your account isn't verify" });
+    }
+
     const token = jwt.sign(
       { _id: user._id, email: user.email },
       process.env.JWT_SECRET,
@@ -126,4 +163,4 @@ async function uploadAvatar(req, res, next) {
   }
 }
 
-module.exports = { register, login, logout, current, uploadAvatar };
+module.exports = { register, verify, login, logout, current, uploadAvatar };
