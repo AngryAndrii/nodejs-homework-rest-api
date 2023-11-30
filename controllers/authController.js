@@ -66,6 +66,32 @@ async function verify(req, res, next) {
   }
 }
 
+//re-Verify function
+async function reVerify(req, res, next) {
+  const { email } = req.body;
+  try {
+    if (email === undefined) {
+      res.status(400).send({ message: "missing required field email" });
+    }
+    const user = await User.findOne({ email }).exec();
+    console.log(user.verify);
+    if (user.verify === false) {
+      await sendEmail({
+        to: email,
+        subject: "Welcome to phonebook!",
+        html: `To confirm the registration open the link <a href="http://localhost:3000/users/verify/${user.verifyToken}">verify your email</a> `,
+        text: `To confirm the registration open the link  http://localhost:3000/users/verify/${user.verifyToken}`,
+      });
+      res.status(200).send({ message: "Verification email sent" });
+    }
+    if (user.verify === true) {
+      res.status(404).send({ message: "Verification has already been passed" });
+    }
+  } catch (error) {
+    next(error);
+  }
+}
+
 //login function
 async function login(req, res, next) {
   const { email, password } = req.body;
@@ -163,4 +189,12 @@ async function uploadAvatar(req, res, next) {
   }
 }
 
-module.exports = { register, verify, login, logout, current, uploadAvatar };
+module.exports = {
+  register,
+  verify,
+  reVerify,
+  login,
+  logout,
+  current,
+  uploadAvatar,
+};
